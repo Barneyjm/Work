@@ -29,24 +29,6 @@ bus_stops_collection = db.chicago_bus_collection
 daily_routes_collection = db.daily_routes_collection
 
 
-def stops_on_route(route):
-    """
-    returns the other stops on the route associated with the given route
-    """
-    stops_list = []
-    for stop in bus_stops_collection.find():
-        try:
-            if route in stop['routes'].split(','):
-                stops_list.append(stop)
-            elif str(route) in stop['routes'].split(','):
-                stops_list.append(stop)
-        except:
-            if route == stop['routes']:
-                stops_list.append(stop)
-        
-    return stops_list
-        
-
 def all_bus_routes():
     """
     list of all bus routes in the bus_stops_collection from every stop
@@ -61,34 +43,26 @@ def all_bus_routes():
             bus_routes.append( str(stop["routes"]).strip() )
                 
     return bus_routes
-    
-    
-def most_routes(n=1):
-    """
-    returns the n most-common route numbers in Chicago
-    @param n: specify number of routes returned in descending order
-    """
-    
-    routes = all_bus_routes()    
-    route_counter = Counter()
-    
-    for word in routes:
-        route_counter[word] += 1
         
-    return route_counter.most_common(n)
     
-    
-def unique_routes():
+def all_graph_flux(show_boardings=True, show_alightings=True):
     """
-    returns the unique set of routes for Chicago
-    """    
-    unique_routes = set(all_bus_routes())
-    try:
-        unique_routes.remove('')
-    except:
-        print "no gap found"
-    
-    return unique_routes
+    Saves the figures from each route showing Boardings vs. Alightings
+    """
+    for stop in unique_routes():
+        graph_flux(stop, True)
+
+        
+def avg_flux(given_route):
+    """
+    returns a given route's average passenger flux over all stops in the route
+    """
+    sum_flux = []
+
+    for stop in stops_on_route(given_route):
+        sum_flux.append(passenger_on_off(stop))
+        
+    return np.average(sum_flux)
  
     
 def freq_stop():    
@@ -113,164 +87,7 @@ def freq_stop():
             #ints won't be the most frequented by nature
             continue
         
-    return most_freq    
-    
-
-def stop_id(stop_id):
-    """
-    returns the stop of the given stop id
-    """
-    return bus_stops_collection.find({"stop_id": stop_id})
-    
-def wolfram_gps_query(given_stop):
-    """
-    does wolfram alpha stuff using the given stop's gps coordinates
-    """   
-    
-    location = ast.literal_eval(given_stop["location"])
-    latti = location[0]
-    longi = -1 * location[1]
-    
-    print latti, longi
-    
-    results = wolfram_client.query(str(latti) + ' deg N, ' + str(longi) + ' deg W')
-    
-    print results
-
-
-def route_map(given_route):
-    """  
-    *semi-functional
-    returns a map of the given route using stops' GPS coordinates
-    """ 
-    route_locations = []
-    x = []
-    y = []
-
-    for stop in bus_stops_collection.find({"routes": given_route}):
-        route_locations.append(ast.literal_eval(stop["location"]))
-    
-    for loc in route_locations:
-        x.append(float(loc[1]) )
-        y.append(float(loc[0]) )
-
-    m = Basemap(llcrnrlon=-88.0696,llcrnrlat=41.8428,urcrnrlon=-87.4502,urcrnrlat=42.5326,
-                projection='merc',resolution='h')
-    # draw coastlines.
-    m.drawcoastlines()
-    m.drawstates()
-    #m.fillcontinents()
-
-    m.drawmapboundary(fill_color='white')
-    # fill continents, set lake color same as ocean color.
-    x1, y1 = m(x,y)
-    #print x1,y1
-    m.scatter(y1,x1,c='r',marker="o",cmap=cm.jet,alpha=1.0)
-    plt.title("Map of Chicago Bus Stops:\nRoute " + str(given_route))
-    plt.show() 
-    
-
-def passenger_on_off(given_stop):
-    """
-    returns the average passenger change from a given stop
-    """
-    return given_stop['boardings'] - given_stop['alightings']
-    
-    
-def stop_busyness(given_stop):
-    """
-    returns the given route's "busyness", Boardings + Alightings
-    """
-    return given_stop['boardings'] + given_stop['alightings']
-    
-    
-def max_passenger_flux(route=None, sign='positive', daytype='Weekday'):
-    """
-    finds the stop with the largest change in the number of people using the bus
-    
-    @param sign: 'positive' indicates people board but don't alight. 'negative' indicates people alight but don't board.
-    @param daytype: 'Weekday' for week day routes. 'Weekend' for weekend routes 
-    (WEEKEND ROUTES DON'T SHOW UP FROM CHICAGO'S DATA)
-    
-    """
-    
-    if sign == 'positive':  
-        max_flux = 0
-        max_flux_stop = None
-        for stop in bus_stops_collection.find({"daytype": daytype}):
-            flux = stop['boardings'] - stop['alightings']
-            if flux > max_flux:
-                max_flux = flux
-                max_flux_stop = stop
-            else:
-                continue
-        return max_flux_stop
-    elif sign == 'negative':
-        min_flux = 0
-        min_flux_stop = None
-        for stop in bus_stops_collection.find({"daytype": daytype}):
-            flux = stop['boardings'] - stop['alightings']
-            if flux < min_flux:
-                min_flux = flux
-                min_flux_stop = stop
-            else:
-                continue
-        return min_flux_stop
-        
-        
-def avg_flux(given_route):
-    """
-    returns a given route's average passenger flux over all stops in the route
-    """
-    sum_flux = []
-
-    for stop in stops_on_route(given_route):
-        sum_flux.append(passenger_on_off(stop))
-        
-    return np.average(sum_flux)
-    
-                
-def same_street(given_stop):
-    """
-    finds stops on the same street as a given stop
-    """
-    
-    street = given_stop["on_street"]
-    
-    longroad = []
-    
-    for stop in bus_stops_collection.find({"on_street": street}):
-        longroad.append(stop)
-    
-    return longroad
-    
-    
-def transfer(given_stop):
-    """
-    returns the routes you can transfer from a given stop.
-    """
-    try:
-        return given_stop["routes"].split(',')
-    except:
-        return str(given_stop["routes"])
-        
-        
-def route_annotations(given_route, anno_div=0.0075):
-    """
-    returns more detailed information about each annotation in the given 
-    route's scatter plot, where 
-    
-    @param anno_div: divisor of average flux of figure. Determines annotation cut-off. Default 0.0075. (ex: 4.3/0.0075 = 573.333)
-
-    """
-    annotations = []
-    avg = avg_flux(given_route)
-    
-    for stop in stops_on_route(given_route):
-        if abs(passenger_on_off(stop)) > abs(avg/anno_div):
-            annotations.append(stop)
-            
-    return annotations
+    return most_freq   
     
     
 def graph_flux(given_route, save=False, show_boardings=True, show_alightings=True, annotate=True, anno_div=0.0075):
@@ -343,13 +160,215 @@ def graph_flux(given_route, save=False, show_boardings=True, show_alightings=Tru
     else:
         plt.show()
         
+
+def max_passenger_flux(route=None, sign='positive', daytype='Weekday'):
+    """
+    finds the stop with the largest change in the number of people using the bus
     
-def all_graph_flux(show_boardings=True, show_alightings=True):
+    @param sign: 'positive' indicates people board but don't alight. 'negative' indicates people alight but don't board.
+    @param daytype: 'Weekday' for week day routes. 'Weekend' for weekend routes 
+    (WEEKEND ROUTES DON'T SHOW UP FROM CHICAGO'S DATA)
+    
     """
-    Saves the figures from each route showing Boardings vs. Alightings
+    
+    if sign == 'positive':  
+        max_flux = 0
+        max_flux_stop = None
+        for stop in bus_stops_collection.find({"daytype": daytype}):
+            flux = stop['boardings'] - stop['alightings']
+            if flux > max_flux:
+                max_flux = flux
+                max_flux_stop = stop
+            else:
+                continue
+        return max_flux_stop
+    elif sign == 'negative':
+        min_flux = 0
+        min_flux_stop = None
+        for stop in bus_stops_collection.find({"daytype": daytype}):
+            flux = stop['boardings'] - stop['alightings']
+            if flux < min_flux:
+                min_flux = flux
+                min_flux_stop = stop
+            else:
+                continue
+        return min_flux_stop
+        
+           
+def most_routes(n=1):
     """
-    for stop in unique_routes():
-        graph_flux(stop, True)
+    returns the n most-common route numbers in Chicago
+    @param n: specify number of routes returned in descending order
+    """
+    
+    routes = all_bus_routes()    
+    route_counter = Counter()
+    
+    for word in routes:
+        route_counter[word] += 1
+        
+    return route_counter.most_common(n)
+  
+  
+def route_annotations(given_route, anno_div=0.0075):
+    """
+    returns more detailed information about each annotation in the given 
+    route's scatter plot, where 
+    
+    @param anno_div: divisor of average flux of figure. Determines annotation cut-off. Default 0.0075. (ex: 4.3/0.0075 = 573.333)
+
+    """
+    annotations = []
+    avg = avg_flux(given_route)
+    
+    for stop in stops_on_route(given_route):
+        if abs(passenger_on_off(stop)) > abs(avg/anno_div):
+            annotations.append(stop)
+            
+    return annotations 
+    
+
+def route_map(given_route):
+    """  
+    *semi-functional
+    returns a map of the given route using stops' GPS coordinates
+    """ 
+    route_locations = []
+    x = []
+    y = []
+
+    for stop in bus_stops_collection.find({"routes": given_route}):
+        route_locations.append(ast.literal_eval(stop["location"]))
+    
+    for loc in route_locations:
+        x.append(float(loc[1]) )
+        y.append(float(loc[0]) )
+
+    m = Basemap(llcrnrlon=-88.0696,llcrnrlat=41.8428,urcrnrlon=-87.4502,urcrnrlat=42.5326,
+                projection='merc',resolution='h')
+    # draw coastlines.
+    m.drawcoastlines()
+    m.drawstates()
+    #m.fillcontinents()
+
+    m.drawmapboundary(fill_color='white')
+    # fill continents, set lake color same as ocean color.
+    x1, y1 = m(x,y)
+    #print x1,y1
+    m.scatter(y1,x1,c='r',marker="o",cmap=cm.jet,alpha=1.0)
+    plt.title("Map of Chicago Bus Stops:\nRoute " + str(given_route))
+    plt.show() 
+    
+    
+def passenger_on_off(given_stop):
+    """
+    returns the average passenger change from a given stop
+    """
+    return given_stop['boardings'] - given_stop['alightings']
+        
+                
+def same_street(given_stop):
+    """
+    finds stops on the same street as a given stop
+    """
+    
+    street = given_stop["on_street"]
+    
+    longroad = []
+    
+    for stop in bus_stops_collection.find({"on_street": street}):
+        longroad.append(stop)
+    
+    return longroad
+    
+    
+def stop_busyness(given_stop):
+    """
+    returns the given route's "busyness", Boardings + Alightings
+    """
+    return given_stop['boardings'] + given_stop['alightings'] 
+    
+    
+def stop_id(stop_id):
+    """
+    returns the stop of the given stop id
+    """
+    return bus_stops_collection.find({"stop_id": stop_id})
+
+
+def stops_on_route(route):
+    """
+    returns the other stops on the route associated with the given route
+    """
+    stops_list = []
+    for stop in bus_stops_collection.find():
+        try:
+            if route in stop['routes'].split(','):
+                stops_list.append(stop)
+            elif str(route) in stop['routes'].split(','):
+                stops_list.append(stop)
+        except:
+            if route == stop['routes']:
+                stops_list.append(stop)
+        
+    return stops_list
+
+        
+def transfer(given_stop):
+    """
+    returns the routes you can transfer from a given stop.
+    """
+    try:
+        return given_stop["routes"].split(',')
+    except:
+        return str(given_stop["routes"])
+        
+        
+def unique_routes():
+    """
+    returns the unique set of routes for Chicago
+    """    
+    unique_routes = set(all_bus_routes())
+    try:
+        unique_routes.remove('')
+    except:
+        print "no gap found"
+    
+    return unique_routes
+ 
+    
+def wolfram_gps_query(given_stop):
+    """
+    does wolfram alpha stuff using the given stop's gps coordinates
+    """   
+    
+    location = ast.literal_eval(given_stop["location"])
+    latti = location[0]
+    longi = -1 * location[1]
+    
+    print latti, longi
+    
+    results = wolfram_client.query(str(latti) + ' deg N, ' + str(longi) + ' deg W')
+    
+    print results
+
+
+    
+
+
+    
+    
+
+
+
+
+        
+        
+
+    
+    
+
+
     
     
     
