@@ -50,7 +50,7 @@ def all_graph_flux(show_boardings=True, show_alightings=True):
     Saves the figures from each route showing Boardings vs. Alightings
     """
     for stop in unique_routes():
-        graph_flux(stop, True)
+        graph_flux(stop, True, True, True, False)
 
         
 def avg_flux(given_route):
@@ -107,7 +107,7 @@ def graph_flux(given_route, save=False, show_boardings=True, show_alightings=Tru
     annotations = []
     i = 1
     
-    for stop in stops_on_route(given_route or str(given_route)):
+    for stop in stops_on_route(given_route):
         stops.append(i)
         avg = avg_flux(given_route)
         flux = passenger_on_off(stop)
@@ -175,7 +175,7 @@ def max_passenger_flux(route=None, sign='positive', daytype='Weekday'):
         max_flux = 0
         max_flux_stop = None
         for stop in bus_stops_collection.find({"daytype": daytype}):
-            flux = stop['boardings'] - stop['alightings']
+            flux = passenger_on_off(stop)
             if flux > max_flux:
                 max_flux = flux
                 max_flux_stop = stop
@@ -186,7 +186,7 @@ def max_passenger_flux(route=None, sign='positive', daytype='Weekday'):
         min_flux = 0
         min_flux_stop = None
         for stop in bus_stops_collection.find({"daytype": daytype}):
-            flux = stop['boardings'] - stop['alightings']
+            flux = passenger_on_off(stop)
             if flux < min_flux:
                 min_flux = flux
                 min_flux_stop = stop
@@ -194,8 +194,23 @@ def max_passenger_flux(route=None, sign='positive', daytype='Weekday'):
                 continue
         return min_flux_stop
         
+        
+def most_busy_on_route(given_route):
+    """
+    returns the busiest stop on the given route.
+    """
+    busiest = None
+    busy_count = 0
+    
+    for stop in stops_on_route(given_route):
+        if stop_busyness(stop) > busy_count:
+            busiest = stop
+            busy_count = stop_busyness(stop)
+            
+    return busiest
+    
            
-def most_routes(n=1):
+def most_common_routes(n=1):
     """
     returns the n most-common route numbers in Chicago
     @param n: specify number of routes returned in descending order
@@ -267,12 +282,14 @@ def passenger_on_off(given_stop):
     return given_stop['boardings'] - given_stop['alightings']
         
                 
-def same_street(given_stop):
+def same_street(given_stop, cross_street=False):
     """
     finds stops on the same street as a given stop
     """
-    
-    street = given_stop["on_street"]
+    if cross_street:
+        street = given_stop["cross_street"]
+    else:
+        street = given_stop["on_street"]
     
     longroad = []
     
@@ -284,7 +301,7 @@ def same_street(given_stop):
     
 def stop_busyness(given_stop):
     """
-    returns the given route's "busyness", Boardings + Alightings
+    returns the given stop's "busyness", Boardings + Alightings
     """
     return given_stop['boardings'] + given_stop['alightings'] 
     
@@ -293,7 +310,8 @@ def stop_id(stop_id):
     """
     returns the stop of the given stop id
     """
-    return bus_stops_collection.find({"stop_id": stop_id})
+    stop=bus_stops_collection.find({"stop_id": stop_id})
+    return stop
 
 
 def stops_on_route(route):
@@ -352,25 +370,6 @@ def wolfram_gps_query(given_stop):
     
     print results
 
-
-    
-
-
-    
-    
-
-
-
-
-        
-        
-
-    
-    
-
-
-    
-    
     
 ####################### Daily routes info below #########################
 
@@ -389,9 +388,7 @@ def route_rides(given_route):
     """
     returns a list of the date and ride number for a given route
     """
-    pass
     
-    
-    
-    
-    
+    for stop in daily_routes_collection.find({"route": given_route}):
+        pass
+        
